@@ -20,6 +20,9 @@
 *.so.*
 *.dylib
 
+# Test Input File
+*.pcap
+
 # Executables
 *.exe
 *.out
