@@ -1,10 +1,8 @@
 #include "udp_raw.h"
 
-#include <stdio.h>
-
 int send_udp_raw (int sock, u_int32_t ip_saddr, u_int32_t ip_daddr, u_int32_t source_port, u_int32_t dest_port, char *data, u_int32_t length)
-    {
-        char buffer[BUF_SIZE]; // создаем буфер для хранения датаграммы перед отправкой
+{
+        char buffer[DEF_PACK_BUF]; // создаем буфер для хранения датаграммы перед отправкой
         memset (buffer, 0, sizeof(buffer)); // зануляем его
 
         struct iphdr *ip = (struct iphdr*) buffer; // структура для хранения IP заголовка пакета
@@ -32,6 +30,7 @@ int send_udp_raw (int sock, u_int32_t ip_saddr, u_int32_t ip_daddr, u_int32_t so
 
         char *tempdata = buffer + sizeof(struct iphdr) + sizeof(struct udphdr); // расположение данных
         memcpy (tempdata, data, length);
+
         udp->len += htons(length);
         ip->tot_len += htons(length);
 
@@ -56,3 +55,28 @@ int send_udp_raw (int sock, u_int32_t ip_saddr, u_int32_t ip_daddr, u_int32_t so
 
         return sendto(sock, buffer, ntohs(ip->tot_len), 0, (struct sockaddr*)&to, sizeof(to));
     }
+
+int recv_udp_raw (int wait_sock, u_int8_t is_check_ip, u_int32_t ip_saddr, u_int32_t dest_port, char *data, u_int32_t length)
+{
+    char read_sock_buf[DEF_PACK_BUF];
+    int i = 0;
+    struct iphdr *ip = (struct iphdr *)read_sock_buf;
+    while(1)
+    {
+        int size_package = recv(wait_sock, read_sock_buf, sizeof(read_sock_buf), 0);
+
+        if (size_package < 0) {
+            return 0;
+        }
+
+        i = ip->ihl * 4;
+        if (is_check_ip == 1 && ip->saddr != ip_saddr) continue;
+        if (ip->protocol != IPPROTO_UDP || i + sizeof(struct udphdr) >= size_package) continue;
+        struct udphdr *udp = (struct udphdr*) (read_sock_buf + ip->ihl * 4); // UDP заголовок
+        if (ntohs(udp->dest) != SERVER_PORT) continue;
+        break;
+    }
+    i+= sizeof(struct udphdr);
+    memcpy (data, read_sock_buf + i, length);
+    return ip->saddr;
+}

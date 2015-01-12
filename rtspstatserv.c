@@ -1,8 +1,6 @@
 #include "rtspstatserv.h"
 #include "parse_pcap.h"
 #include "udp_raw.h"
-#define SOCKET (3)
-#define SOCKET2 (4)
 
 void usage()
 {
@@ -25,18 +23,18 @@ int main (int argc, char **argv)
 	}
 
 
-	int waitSocket = -1; // сокет для приема клиентов
-	waitSocket = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+	int wait_socket = -1; // сокет для приема клиентов
+	wait_socket = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
 	// AF_INET - использование TCP/IP (IPv4)
 	// SOCK_RAW - указывает на использование сырых сокетов
 	// IPPROTO_UDP - использование протокола транспортного уровня UDP
 
-	if (waitSocket < 0) {
+	if (wait_socket < 0) {
 		perror("[\033[31m*\033[0m] Error! Can't create socket");
 		exit(EXIT_FAILURE);
 	}
 	else {
-		printf("[\033[32m*\033[0m] Socket ok\n");
+		printf("[\033[32m*\033[0m] Recv socket ok\n");
 	}
 
 	int sock = -1; // сокет для приема клиентов
@@ -44,30 +42,31 @@ int main (int argc, char **argv)
 	// AF_INET - использование TCP/IP (IPv4)
 	// SOCK_RAW - указывает на использование сырых сокетов
 
-	char readSockBuf[DEF_PACK_BUF];
-
-	while (1) {
-		
-		int sizePackage = recv(waitSocket, readSockBuf, sizeof(readSockBuf), 0);
-
-		if (sizePackage < 0) {
+	if (socket < 0) {
+		perror("[\033[31m*\033[0m] Error! Can't create socket");
+		exit(EXIT_FAILURE);
+	}
+	else {
+		printf("[\033[32m*\033[0m] Send socket ok\n");
+	}
+	char read_sock_buf[DEF_PACK_BUF];
+	while(1)
+	{
+		u_int32_t ip_cliaddr = recv_udp_raw(wait_socket, 0, 0, SERVER_PORT, read_sock_buf, DEF_PACK_BUF);
+		if (ip_cliaddr == 0) {
 			perror("[\033[31m*\033[0m] Error! Recieve package\n");
 			exit(EXIT_FAILURE);
 		}
+		else {
+			printf("[\033[32m*\033[0m] Client ok\n");
+		}
 
-		struct iphdr *ip = (struct iphdr *)readSockBuf;
-		int i = ip->ihl * 4;
-
-		if (ip->protocol != IPPROTO_UDP || i + sizeof(struct udphdr) >= sizePackage) continue;
-		struct udphdr *udp = (struct udphdr*) (readSockBuf + ip->ihl * 4); // UDP заголовок
-		if (ntohs(udp->dest) != SERVER_PORT) continue;
-		
-		i+= sizeof(struct udphdr);
-
+		u_int32_t *ip_req = (u_int32_t *) read_sock_buf;
+	
 		char data[sizeof(struct stat)];
 		struct stat *this_stat = (struct stat *) data;
 
-		if (parse_pcap(this_stat, argc, argv, ip->saddr) == -1)
+		if (parse_pcap(this_stat, argc, argv, *ip_req) == -1)
 			exit (EXIT_FAILURE);
 
 		if (sock < 0) {
@@ -75,10 +74,10 @@ int main (int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 		else {
-			printf("[\033[32m*\033[0m] Socket ok\n");
+			printf("[\033[32m*\033[0m] Send socket ok\n");
 		}
 
-		if (send_udp_raw (SOCKET2, inet_addr(SERVER_ADDRESS), ip->saddr, CLIENT_PORT, SERVER_PORT, data, sizeof(struct stat)) < 0 ) {
+		if (send_udp_raw (sock, inet_addr(SERVER_ADDRESS), ip_cliaddr, CLIENT_PORT, SERVER_PORT, data, sizeof(struct stat)) < 0 ) {
     		perror("[\033[31m*\033[0m] Error! Package not recieve\n");
     		exit(EXIT_FAILURE);
     	}

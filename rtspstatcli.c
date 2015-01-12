@@ -3,11 +3,15 @@
 #include "chksum.h"
 #include "parse_pcap.h"
 
-#define SOCKET (3)
 #define DEF_PACK_BUF (65536)
 
 int main (int argc, char **argv)
 {		
+
+	if (argc < 2) {
+		perror("[\033[31m*\033[0m]Error! Wrong Arguments\n");
+		exit(EXIT_FAILURE);
+	}
 
 	int sock = -1; // сокет для приема клиентов
 	sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -19,15 +23,19 @@ int main (int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	else {
-		printf("[\033[32m*\033[0m] Socket ok\n");
+		printf("[\033[32m*\033[0m] Socket for send ok\n");
 	}
 
-	char data[22];
-	strcpy (data, "[\033[32m*\033[0m]  Запрос от клиента");
+	char data[APP_PACK_SIZE]; // память для содержимого пакета
+	u_int32_t *req_ip_addr = (u_int32_t *)(data);
+	*req_ip_addr = inet_addr(argv[1]);
 	
-    if (send_udp_raw (SOCKET, inet_addr(LOCAL_ADDRESS), inet_addr(SERVER_ADDRESS), CLIENT_PORT, SERVER_PORT, data, 6) < 0 ) {
+    if (send_udp_raw (sock, inet_addr(LOCAL_ADDRESS), inet_addr(SERVER_ADDRESS), CLIENT_PORT, SERVER_PORT, data, sizeof(u_int32_t)) < 0 ) {
     	perror("[\033[31m*\033[0m] Error! Package not recieve\n");
     	exit(EXIT_FAILURE);
+    }
+    else {
+    	printf("[\033[32m*\033[0m] Send ok\n");
     }
 
     int wait_socket = -1; // сокет для приема клиентов
@@ -41,35 +49,23 @@ int main (int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	else {
-		printf("[\033[32m*\033[0m] Socket ok\n");
+		printf("[\033[32m*\033[0m] Socket for recv ok\n");
 	}
 
-	char readSockBuf[DEF_PACK_BUF];
-    
-    while (1)
-    {
-	    int sizePackage = recv(wait_socket, readSockBuf, sizeof(readSockBuf), 0);
+	char read_sock_buf[sizeof(struct stat)];
 
-		if (sizePackage < 0) {
-			perror("[\033[31m*\033[0m] Error! Recieve package\n");
-			exit(EXIT_FAILURE);
-		}
-
-		struct iphdr *ip = (struct iphdr *)readSockBuf;
-		int i = ip->ihl * 4;
-
-		if (ip->protocol != IPPROTO_UDP || i + sizeof(struct udphdr) >= sizePackage) continue;
-		struct udphdr *udp = (struct udphdr*) (readSockBuf + ip->ihl * 4); // UDP заголовок
-		if (ntohs(udp->dest) != CLIENT_PORT) continue;
-			
-		i += sizeof(struct udphdr);
-
-		struct stat *this_stat = (struct stat *) (readSockBuf + i);
-
-		printf("Processed %d packets and %u MBytes, in %d files\n", this_stat->pkts_count, this_stat->pkts_length, argc-1);
-	  	printf("Min Speed: %f, Max Speed: %f, Average Speed: %f\n", this_stat->min_speed, this_stat->max_speed, this_stat->aver_speed);
-
-	  	break;
+    if (recv_udp_raw(wait_socket, 1, inet_addr(SERVER_ADDRESS), CLIENT_PORT, read_sock_buf, sizeof(struct stat)) == 0) {
+		perror("[\033[31m*\033[0m] Error! Recieve package\n");
+		exit(EXIT_FAILURE);
 	}
+	else {
+		printf("[\033[32m*\033[0m] Recv ok\n");
+	}
+
+	struct stat *this_stat = (struct stat *) (read_sock_buf);
+
+	printf("Processed %d packets and %u MBytes, in %d files\n", this_stat->pkts_count, this_stat->pkts_length, argc-1);
+	printf("Min Speed: %f, Max Speed: %f, Average Speed: %f\n", this_stat->min_speed, this_stat->max_speed, this_stat->aver_speed);
+
     exit(EXIT_SUCCESS);
 }
